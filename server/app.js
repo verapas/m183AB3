@@ -11,8 +11,8 @@ const server = http.createServer(app);
 
 // Rate limiter für den Login-Endpoint
 const loginLimiter = rateLimit({
-  windowMs: 60 * 1000 * 10, // 10 Minute
-  max: 10, // Maximal 10 Anfragen alle 10 minuten
+  windowMs: 60 * 1000 , // 10 Minute
+  max: 50, // Maximal 10 Anfragen alle 10 minuten
   message: "Zu viele Anfragen, bitte versuchen Sie es in einer Minute erneut."
 });
 app.use("/api/login", loginLimiter);

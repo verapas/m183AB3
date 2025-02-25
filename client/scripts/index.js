@@ -23,6 +23,7 @@ document.addEventListener("DOMContentLoaded", () => {
     await login(username, password);
   });
 
+
   bruteForceButton.addEventListener("click", async () => {
     const username = usernameInput.value;
     const password = passwordInput.value;
