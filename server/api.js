@@ -15,7 +15,6 @@ function authenticateToken(req, res, next) {
     if (!authHeader) {
         return res.status(401).json({ message: "Unauthorized: Token fehlt" });
     }
-    // Erwartetes Format: "Bearer <token>"
     const token = authHeader.split(" ")[1];
     if (!token) {
         return res.status(401).json({ message: "Unauthorized: Token fehlt" });
@@ -24,7 +23,6 @@ function authenticateToken(req, res, next) {
         if (err) {
             return res.status(403).json({ message: "Forbidden: Ungültiges Token" });
         }
-        // Optional: Die dekodierten Daten im Request speichern
         req.user = decoded;
         next();
     });
