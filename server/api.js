@@ -15,6 +15,7 @@ function authenticateToken(req, res, next) {
     if (!authHeader) {
         return res.status(401).json({ message: "Unauthorized: Token fehlt" });
     }
+    // Erwartetes Format: "Bearer <token>"
     const token = authHeader.split(" ")[1];
     if (!token) {
         return res.status(401).json({ message: "Unauthorized: Token fehlt" });
@@ -22,6 +23,10 @@ function authenticateToken(req, res, next) {
     jwt.verify(token, secretKey, (err, decoded) => {
         if (err) {
             return res.status(403).json({ message: "Forbidden: Ungültiges Token" });
+        }
+        // Überprüfen, ob die Rolle vorhanden ist und den Wert "viewer" hat
+        if (!decoded.role || decoded.role !== "viewer") {
+            return res.status(403).json({ message: "Forbidden: Ungültige Rolle" });
         }
         req.user = decoded;
         next();
@@ -77,7 +82,7 @@ const login = async (req, res) => {
                 return res.status(401).send("Unauthorized: Benutzername oder Passwort ungültig");
             }
             // Authentifizierung erfolgreich: Token erzeugen
-            const token = jwt.sign({ username: username }, secretKey, { expiresIn: "1h" });
+            const token = jwt.sign({ username: username, role: "viewer" }, secretKey, { expiresIn: "1h" });
             return res.send({ token });  // Wichtig: 'return' vor res.send, damit der Callback beendet wird
         } catch (error) {
             console.error(error);
