@@ -1,13 +1,14 @@
 const { body, validationResult } = require("express-validator");
-const {hash, compare} = require("bcrypt");
 const db = require('../db');
-const {sign} = require("jsonwebtoken");
 require('dotenv').config();
-
-const saltRounds = 10;
-const secretKey = process.env.JWT_SECRET
+const AesEncryption = require("aes-encryption");
+const aes = new AesEncryption();
+aes.setSecretKey(process.env.AES_SECRET);
+const secretKey = process.env.JWT_SECRET;
 const bcrypt = require("bcrypt");
 const jwt = require("jsonwebtoken");
+
+console.log("AES Secret:", process.env.AES_SECRET);
 
 // Middleware zur Token-Authentifizierung
 function authenticateToken(req, res, next) {
@@ -15,7 +16,6 @@ function authenticateToken(req, res, next) {
     if (!authHeader) {
         return res.status(401).json({ message: "Unauthorized: Token fehlt" });
     }
-    // Erwartetes Format: "Bearer <token>"
     const token = authHeader.split(" ")[1];
     if (!token) {
         return res.status(401).json({ message: "Unauthorized: Token fehlt" });
@@ -24,7 +24,6 @@ function authenticateToken(req, res, next) {
         if (err) {
             return res.status(403).json({ message: "Forbidden: Ungültiges Token" });
         }
-        // Überprüfen, ob die Rolle vorhanden ist und den Wert "viewer" hat
         if (!decoded.role || decoded.role !== "viewer") {
             return res.status(403).json({ message: "Forbidden: Ungültige Rolle" });
         }
@@ -33,27 +32,7 @@ function authenticateToken(req, res, next) {
     });
 }
 
-// Beispiel posts
-const posts = [
-    {
-        id: 1,
-        title: "Introduction to JavaScript",
-        content: "JavaScript is a dynamic language primarily used for web development...",
-    },
-    {
-        id: 2,
-        title: "Functional Programming",
-        content: "Functional programming is a paradigm where functions take center stage...",
-    },
-    {
-        id: 3,
-        title: "Asynchronous Programming in JS",
-        content: "Asynchronous programming allows operations to run in parallel without blocking the main thread...",
-    }
-];
-
 const login = async (req, res) => {
-    // Validierung der Eingaben prüfen
     const errors = validationResult(req);
     if (!errors.isEmpty()) {
         return res.status(400).json({
@@ -61,29 +40,22 @@ const login = async (req, res) => {
             errors: errors.array()
         });
     }
-
     const { username, password } = req.body;
-
-    // Suche den Benutzer in der Datenbank
     db.get("SELECT * FROM users WHERE username = ?", [username], async (err, row) => {
         if (err) {
             console.error(err.message);
             return res.status(500).send("Interner Serverfehler");
         }
         if (!row) {
-            // Kein Benutzer gefunden => 401 zurückgeben
             return res.status(401).send("Unauthorized: Benutzername oder Passwort ungültig");
         }
-
         try {
-            // Vergleiche das eingegebene Passwort mit dem in der DB gespeicherten Hash
             const match = await bcrypt.compare(password, row.password);
             if (!match) {
                 return res.status(401).send("Unauthorized: Benutzername oder Passwort ungültig");
             }
-            // Authentifizierung erfolgreich: Token erzeugen
             const token = jwt.sign({ username: username, role: "viewer" }, secretKey, { expiresIn: "1h" });
-            return res.send({ token });  // Wichtig: 'return' vor res.send, damit der Callback beendet wird
+            return res.send({ token });
         } catch (error) {
             console.error(error);
             return res.status(500).send("Interner Serverfehler");
@@ -92,6 +64,7 @@ const login = async (req, res) => {
 };
 
 const initializeAPI = async (app) => {
+    // Login-Endpunkt
     app.post(
         "/api/login",
         [
@@ -108,9 +81,36 @@ const initializeAPI = async (app) => {
         ],
         login
     );
-    // Geschützter GET-Endpunkt für Posts
+
+    // GET-Endpunkt: Posts abrufen und entschlüsseln
     app.get("/api/posts", authenticateToken, (req, res) => {
-        res.json(posts);
+        db.all("SELECT * FROM posts", [], (err, rows) => {
+            if (err) {
+                return res.status(500).json({ error: err.message });
+            }
+            const decryptedPosts = rows.map(row => ({
+                id: row.id,
+                title: aes.decrypt(row.title),
+                content: aes.decrypt(row.content)
+            }));
+            res.json(decryptedPosts);
+        });
+    });
+
+    // POST-Endpunkt: Neuen Post speichern (verschlüsseln)
+    app.post("/api/posts", authenticateToken, (req, res) => {
+        const { title, content } = req.body;
+        if (!title || !content) {
+            return res.status(400).json({ message: "Titel und Inhalt sind erforderlich." });
+        }
+        const encryptedTitle = aes.encrypt(title);
+        const encryptedContent = aes.encrypt(content);
+        db.run("INSERT INTO posts (title, content) VALUES (?, ?)", [encryptedTitle, encryptedContent], function(err) {
+            if (err) {
+                return res.status(500).json({ error: err.message });
+            }
+            res.status(201).json({ message: "Post erfolgreich gespeichert", postId: this.lastID });
+        });
     });
 };
 
